@@ -1,5 +1,8 @@
 <?php
 
+
+namespace CPT;
+
 /**
  * Class Cat
  *
@@ -7,107 +10,196 @@
  */
 class Cat
 {
-    /**
-     * The key used by the cat post type.
-     *
-     * @var string
-     */
     const POST_TYPE = 'cat';
     const META = [
-        'father', 'mother', 'gender'
+        'gender',
+        'father', 'mother',
     ];
 
     public static function register()
     {
-        $instance = new self;
-        add_action('init', [$instance, 'registerPostType']);
-        add_action('init', [$instance, 'registerTaxonomy']);
-        add_action('add_meta_boxes', [$instance, 'registerMetaboxes']);
-        add_action('save_post_' . self::POST_TYPE, [$instance, 'save']);
-
-        // Do something else related to "Cat" post type
+        add_action('init', [self::class, 'post_type']);
+        add_action('save_post', [self::class, 'save'], 1, 2);
     }
 
-    public function registerPostType()
+    static function post_type()
     {
-        register_post_type( self::POST_TYPE, [
-            'labels' => [
-                'name' => __( 'Cats' ),
-                'singular_name' => __( 'Cat' ),
-                'search_items' =>  __( 'Search Cats' ),
-                'all_items' => __( 'All Cats' ),
-                'parent_item' => __( 'Parent Cat' ),
-                'parent_item_colon' => __( 'Parent Cat:' ),
-                'edit_item' => __( 'Edit Cat' ),
-                'update_item' => __( 'Update Cat' ),
-                'add_new_item' => __( 'Add New Cat' ),
-                'new_item_name' => __( 'New Cat Name' ),
-                'menu_name' => __( 'Cats' ),
-            ],
-            'public' => true,
-            'has_archive' => true,
-            'publicly_queryable' => true,
-        ]);
-    }
 
-    public function registerTaxonomy()
-    {
-        // Таксономия для разделения котов на пометы
         $labels = array(
-            'name' => _x( 'Letters', 'taxonomy general name' ),
-            'singular_name' => _x( 'Letter', 'taxonomy singular name' ),
-            'search_items' =>  __( 'Search Letters' ),
-            'all_items' => __( 'All Letters' ),
-            'parent_item' => __( 'Parent Letter' ),
-            'parent_item_colon' => __( 'Parent Letter:' ),
-            'edit_item' => __( 'Edit Letter' ),
-            'update_item' => __( 'Update Letter' ),
-            'add_new_item' => __( 'Add New Letter' ),
-            'new_item_name' => __( 'New Letter Name' ),
-            'menu_name' => __( 'Letters' ),
+            'name' => __('Cats'),
+            'singular_name' => __('Cat'),
+            'add_new' => __('Add New Cat'),
+            'add_new_item' => __('Add New Cat'),
+            'edit_item' => __('Edit Cat'),
+            'new_item' => __('Add New Cat'),
+            'view_item' => __('View Cat'),
+            'search_items' => __('Search Cat'),
+            'not_found' => __('No cats found'),
+            'not_found_in_trash' => __('No cats found in trash')
         );
 
-        // Now register the taxonomy
-        register_taxonomy('letters',array(self::POST_TYPE), array(
-            'hierarchical' => true,
+        $supports = array(
+            'title',
+            'editor',
+            'thumbnail',
+            'revisions',
+        );
+
+        $args = array(
             'labels' => $labels,
-            'show_ui' => true,
-            'show_in_rest' => true,
-            'show_admin_column' => true,
-            'query_var' => true,
-            'rewrite' => array( 'slug' => 'letter' ),
-            'publicly_queryable' => true,
-        ));
-    }
-
-    public function registerMetaBoxes()
-    {
-        // Cat metabox
-        add_meta_box(
-            'cat-info-metabox',
-            __('Information', 'perfect-cat'),
-            [$this, 'infoMetabox'],
-            self::POST_TYPE
+            'supports' => $supports,
+            'public' => true,
+            'capability_type' => 'post',
+            'rewrite' => array('slug' => 'cats'),
+            'has_archive' => true,
+            'menu_position' => 30,
+            'menu_icon' => 'dashicons-calendar-alt',
+            'register_meta_box_cb' => [self::class, 'add_metaboxes'],
         );
+
+        register_post_type(self::type(), $args);
+
     }
 
-    public function infoMetabox()
+    /**
+     * Save the metabox data
+     */
+    static function save($post_id, $post)
     {
-        load_template(plugin_dir_path(__FILE__) . '/templates/metabox.php');
+
+        // Return if the user doesn't have edit permissions.
+        if (!current_user_can('edit_post', $post_id)) {
+            return $post_id;
+        }
+
+        // Verify this came from the our screen and with proper authorization,
+        // because save_post can be triggered at other times.
+        if (!isset($_POST['cat_fields']) || !wp_verify_nonce($_POST['cat_fields'], basename(__FILE__))) {
+            return $post_id;
+        }
+
+        $meta = [];
+
+        // Now that we're authenticated, time to save the data.
+        // This sanitizes the data from the field and saves it into an array $meta.
+        foreach (self::META as $key){
+            $meta[$key] = esc_textarea($_POST[$key]);
+        }
+
+        // Cycle through the $meta array.
+        // Note, in this example we just have one item, but this is helpful if you have multiple.
+        foreach ($meta as $key => $value) :
+
+            // Don't store custom data twice
+            if ('revision' === $post->post_type) {
+                return;
+            }
+
+            if (get_post_meta($post_id, $key, false)) {
+                // If the custom field already has a value, update it.
+                update_post_meta($post_id, $key, $value);
+            } else {
+                // If the custom field doesn't have a value, add it.
+                add_post_meta($post_id, $key, $value);
+            }
+
+            if (!$value) {
+                // Delete the meta key if there's no value
+                delete_post_meta($post_id, $key);
+            }
+
+        endforeach;
+
     }
 
-    public static function save()
+    static function add_metaboxes()
+    {
+        add_meta_box(
+            'cat_gender',
+            'Cat gender',
+            [self::class, 'cat_gender'],
+            self::type(),
+            'side',
+            'default'
+        );
+
+        add_meta_box(
+            'cat_parents',
+            'Cat parents',
+            [self::class, 'cat_parents'],
+            self::type(),
+            'side',
+            'default'
+        );
+
+        wp_reset_postdata();
+    }
+
+    /**
+     * Output the HTML for the metabox.
+     */
+    static function cat_gender()
     {
         global $post;
 
-        foreach (self::META as $key) {
-            if (array_key_exists($key, $_POST)) {
-                update_post_meta(
-                    $post->ID,
-                    self::POST_TYPE . '_' . $key . '_meta_key',
-                    $_POST[$key]
-                );
+        // Nonce field to validate form request came from current site
+        wp_nonce_field(basename(__FILE__), 'cat_fields');
+
+        // Get the gender data if it's already been entered
+        $gender = get_post_meta($post->ID, 'gender', true);
+
+        // Output the field
+        echo sprintf('<input type="radio" id="male" name="gender" %s value="male">
+        <label for="male">Male</label><br>
+        <input type="radio" id="female" name="gender" %s value="female">
+        <label for="female">Female</label><br><br>', $gender == 'male' ? 'checked' : '', $gender == 'female' ? 'checked' : '');
+    }
+
+    static function cat_parents(){
+        global $post;
+
+        $father = get_post_meta($post->ID, 'father', true);
+        $mother = get_post_meta($post->ID, 'mother', true);
+
+        global $wpdb;
+
+        $q = <<<TEXT
+            SELECT post.ID, post.post_title, post.post_type, meta.meta_value as gender FROM $wpdb->posts AS post
+            LEFT JOIN $wpdb->postmeta as meta 
+            ON meta.post_id = post.id
+            WHERE meta.meta_key = 'gender' AND post.id != $post->ID AND post.post_type = 'cat'
+TEXT;
+
+        $cats = $wpdb->get_results($q, ARRAY_A);
+        $select1 = '';
+        $select2 = '';
+
+        if ($cats) {
+            foreach ($cats as $cat){
+                $selected = '';
+                switch ($cat['gender']){
+                    case 'male'  : $selected .= selected($father, $cat['ID'], false); break;
+                    case 'female': $selected .= selected($mother, $cat['ID'], false); break;
+                    default: break;
+                }
+                $option = '<option value="' . $cat['ID'] . '" ' . $selected . '>' . $cat['post_title'] . '</option>';
+                switch ($cat['gender']){
+                    case 'male'  : $select1 .= $option; break;
+                    case 'female': $select2 .= $option; break;
+                    default: break;
+                }
             }
         }
+
+        echo '<label for="father">Father</label>
+        <select name="father" id="father" class="postbox">
+            <option value="">Select parent...</option>' . $select1 . '</select>
+        <label for="mother">Mother</label>
+        <select name="mother" id="mother" class="postbox">
+            <option value="">Select parent...</option>' . $select2 . '</select>';
+    }
+
+    public static function type(){
+        return self::POST_TYPE;
     }
 }

@@ -7,11 +7,11 @@
  * @package WordPress
  * @subpackage perfectcat
  */
-$gender = get_post_meta($post->ID, 'cat_gender_meta_key', true);
-$father = get_post_meta($post->ID, 'cat_father_meta_key', true);
-$mother = get_post_meta($post->ID, 'cat_mother_meta_key', true);
+$gender = get_post_meta($post->ID, '_cat_gender_meta_key', true);
+$father = get_post_meta($post->ID, '_cat_father_meta_key', true);
+$mother = get_post_meta($post->ID, '_cat_mother_meta_key', true);
 $args = array(
-'meta_key'     	=> 'cat_gender_meta_key',
+'meta_key'     	=> '_cat_gender_meta_key',
 'meta_value'   	=> 'male',
 'meta_compare' 	=> '=',
 'post_type'		=> 'cat',
