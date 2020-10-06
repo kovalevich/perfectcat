@@ -3,24 +3,100 @@
 
 namespace CPT;
 
+
+/**
+ * Abstract class custom post type PostType
+ */
+class PostType
+{
+    public static function register()
+    {
+        $class_name = get_called_class();
+        add_action('init', [$class_name, 'post_type']);
+        add_action('save_post', [$class_name, 'save'], 1, 2);
+    }
+
+    /**
+     * Abstract method add post type
+     */
+    public static function post_type(){}
+
+    /**
+     * Abstract method create custom metaboxes
+     */
+    public static function add_metaboxes(){}
+
+    /**
+     * Save the metabox data
+     */
+    static function save($post_id, $post)
+    {
+        $class_name = get_called_class();
+
+        // Return if the user doesn't have edit permissions.
+        if (!current_user_can('edit_post', $post_id)) {
+            return $post_id;
+        }
+
+        // Verify this came from the our screen and with proper authorization,
+        // because save_post can be triggered at other times.
+        if (!isset($_POST['cat_fields']) || !wp_verify_nonce($_POST['cat_fields'], basename(__FILE__))) {
+            return $post_id;
+        }
+
+        $meta = [];
+
+        // Now that we're authenticated, time to save the data.
+        // This sanitizes the data from the field and saves it into an array $meta.
+        foreach ($class_name::META as $key){
+            $meta[$key] = esc_textarea($_POST[$key]);
+        }
+
+        // Cycle through the $meta array.
+        // Note, in this example we just have one item, but this is helpful if you have multiple.
+        foreach ($meta as $key => $value) :
+
+            // Don't store custom data twice
+            if ('revision' === $post->post_type) {
+                return;
+            }
+
+            if (get_post_meta($post_id, $key, false)) {
+                // If the custom field already has a value, update it.
+                update_post_meta($post_id, $key, $value);
+            } else {
+                // If the custom field doesn't have a value, add it.
+                add_post_meta($post_id, $key, $value);
+            }
+
+            if (!$value) {
+                // Delete the meta key if there's no value
+                delete_post_meta($post_id, $key);
+            }
+
+        endforeach;
+
+    }
+
+    public static function type(){
+        $class_name = get_called_class();
+        return $class_name::POST_TYPE;
+    }
+
+}
+
 /**
  * Class Cat
  *
  * Handles the creation of a "Cat" custom post type
  */
-class Cat
+class Cat extends PostType
 {
     const POST_TYPE = 'cat';
     const META = [
         'gender',
         'father', 'mother',
     ];
-
-    public static function register()
-    {
-        add_action('init', [self::class, 'post_type']);
-        add_action('save_post', [self::class, 'save'], 1, 2);
-    }
 
     static function post_type()
     {
@@ -58,57 +134,6 @@ class Cat
         );
 
         register_post_type(self::type(), $args);
-
-    }
-
-    /**
-     * Save the metabox data
-     */
-    static function save($post_id, $post)
-    {
-
-        // Return if the user doesn't have edit permissions.
-        if (!current_user_can('edit_post', $post_id)) {
-            return $post_id;
-        }
-
-        // Verify this came from the our screen and with proper authorization,
-        // because save_post can be triggered at other times.
-        if (!isset($_POST['cat_fields']) || !wp_verify_nonce($_POST['cat_fields'], basename(__FILE__))) {
-            return $post_id;
-        }
-
-        $meta = [];
-
-        // Now that we're authenticated, time to save the data.
-        // This sanitizes the data from the field and saves it into an array $meta.
-        foreach (self::META as $key){
-            $meta[$key] = esc_textarea($_POST[$key]);
-        }
-
-        // Cycle through the $meta array.
-        // Note, in this example we just have one item, but this is helpful if you have multiple.
-        foreach ($meta as $key => $value) :
-
-            // Don't store custom data twice
-            if ('revision' === $post->post_type) {
-                return;
-            }
-
-            if (get_post_meta($post_id, $key, false)) {
-                // If the custom field already has a value, update it.
-                update_post_meta($post_id, $key, $value);
-            } else {
-                // If the custom field doesn't have a value, add it.
-                add_post_meta($post_id, $key, $value);
-            }
-
-            if (!$value) {
-                // Delete the meta key if there's no value
-                delete_post_meta($post_id, $key);
-            }
-
-        endforeach;
 
     }
 
@@ -198,8 +223,50 @@ TEXT;
         <select name="mother" id="mother" class="postbox">
             <option value="">Select parent...</option>' . $select2 . '</select>';
     }
+}
 
-    public static function type(){
-        return self::POST_TYPE;
+class Litter extends PostType
+{
+
+    const POST_TYPE = 'litter';
+    const META = [];
+
+    static function post_type()
+    {
+
+        $labels = array(
+            'name' => __('Litters'),
+            'singular_name' => __('Litter'),
+            'add_new' => __('Add New Litter'),
+            'add_new_item' => __('Add New Litter'),
+            'edit_item' => __('Edit Litter'),
+            'new_item' => __('Add New Litter'),
+            'view_item' => __('View Litter'),
+            'search_items' => __('Search Litter'),
+            'not_found' => __('No litters found'),
+            'not_found_in_trash' => __('No litters found in trash')
+        );
+
+        $supports = array(
+            'title',
+            'editor',
+            'thumbnail',
+            'revisions',
+        );
+
+        $args = array(
+            'labels' => $labels,
+            'supports' => $supports,
+            'public' => true,
+            'capability_type' => 'post',
+            'rewrite' => array('slug' => 'litters'),
+            'has_archive' => true,
+            'menu_position' => 30,
+            'menu_icon' => 'dashicons-calendar-alt',
+            'register_meta_box_cb' => [self::class, 'add_metaboxes'],
+        );
+
+        register_post_type(self::type(), $args);
+
     }
 }

@@ -12,7 +12,9 @@ Version: 0.0.1
 Author URI: https://www.linkedin.com/in/kavalevich/
 */
 
-include_once 'CPT/Custom.php';
+include_once 'CPT/Cat.php';
 use CPT\Cat;
+use CPT\Litter;
 
 Cat::register();
+Litter::register();
