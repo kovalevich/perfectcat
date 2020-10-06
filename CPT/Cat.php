@@ -40,16 +40,17 @@ class PostType
 
         // Verify this came from the our screen and with proper authorization,
         // because save_post can be triggered at other times.
-        if (!isset($_POST['cat_fields']) || !wp_verify_nonce($_POST['cat_fields'], basename(__FILE__))) {
-            return $post_id;
-        }
+        //if (!isset($_POST['cat_fields']) || !wp_verify_nonce($_POST['cat_fields'], basename(__FILE__))) {
+        //    return $post_id;
+        //}
 
         $meta = [];
 
         // Now that we're authenticated, time to save the data.
         // This sanitizes the data from the field and saves it into an array $meta.
         foreach ($class_name::META as $key){
-            $meta[$key] = esc_textarea($_POST[$key]);
+            if (isset($_POST[$key]))
+                $meta[$key] = esc_textarea($_POST[$key]);
         }
 
         // Cycle through the $meta array.
@@ -95,6 +96,7 @@ class Cat extends PostType
     const POST_TYPE = 'cat';
     const META = [
         'gender',
+        'birthday',
         'father', 'mother',
     ];
 
@@ -129,7 +131,7 @@ class Cat extends PostType
             'rewrite' => array('slug' => 'cats'),
             'has_archive' => true,
             'menu_position' => 30,
-            'menu_icon' => 'dashicons-calendar-alt',
+            'menu_icon' => 'dashicons-pets',
             'register_meta_box_cb' => [self::class, 'add_metaboxes'],
         );
 
@@ -149,6 +151,15 @@ class Cat extends PostType
         );
 
         add_meta_box(
+            'cat_birthday',
+            'Cat birthday',
+            [self::class, 'cat_birthday'],
+            self::type(),
+            'side',
+            'default'
+        );
+
+        add_meta_box(
             'cat_parents',
             'Cat parents',
             [self::class, 'cat_parents'],
@@ -158,6 +169,79 @@ class Cat extends PostType
         );
 
         wp_reset_postdata();
+    }
+
+    static function cat_birthday()
+    {
+        global $post;
+
+        // Get the gender data if it's already been entered
+        $date = get_post_meta($post->ID, 'birthday', true);
+
+        // Output the field
+        echo '<input type="text" class="datepicker" name="birthday" value="' . $date . '"/>';
+
+        self::datepicker_js();
+    }
+
+    static function datepicker_js(){
+        // подключаем все необходимые скрипты: jQuery, jquery-ui, datepicker
+        wp_enqueue_script('jquery-ui-datepicker');
+
+        // подключаем нужные css стили
+        wp_enqueue_style('jqueryui', 'https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css', false, null );
+
+        // инициализируем datepicker
+        if( is_admin() )
+            add_action('admin_footer', [self::class, 'init_datepicker'], 99 ); // для админки
+        else
+            add_action('wp_footer', [self::class, 'init_datepicker'], 99 ); // для админки
+
+    }
+
+    static function init_datepicker(){
+        ?>
+        <script type="text/javascript">
+            jQuery(document).ready(function($){
+                'use strict';
+                // настройки по умолчанию. Их можно добавить в имеющийся js файл,
+                // если datepicker будет использоваться повсеместно на проекте и предполагается запускать его с разными настройками
+                $.datepicker.setDefaults({
+                    closeText: 'Закрыть',
+                    prevText: '<Пред',
+                    nextText: 'След>',
+                    currentText: 'Сегодня',
+                    monthNames: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'],
+                    monthNamesShort: ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'],
+                    dayNames: ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'],
+                    dayNamesShort: ['вск','пнд','втр','срд','чтв','птн','сбт'],
+                    dayNamesMin: ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'],
+                    weekHeader: 'Нед',
+                    dateFormat: 'dd-mm-yy',
+                    firstDay: 1,
+                    showAnim: 'slideDown',
+                    isRTL: false,
+                    showMonthAfterYear: false,
+                    yearSuffix: ''
+                } );
+
+                // Инициализация
+                $('.datepicker').datepicker({ dateFormat: 'dd/mm/yy' });
+                // можно подключить datepicker с доп. настройками так:
+                /*
+                $('input[name*="date"]').datepicker({
+                    dateFormat : 'yy-mm-dd',
+                    onSelect : function( dateText, inst ){
+            // функцию для поля где указываются еще и секунды: 000-00-00 00:00:00 - оставляет секунды
+            var secs = inst.lastVal.match(/^.*?\s([0-9]{2}:[0-9]{2}:[0-9]{2})$/);
+            secs = secs ? secs[1] : '00:00:00'; // только чч:мм:сс, оставим часы минуты и секунды как есть, если нет то будет 00:00:00
+            $(this).val( dateText +' '+ secs );
+                    }
+                });
+                */
+            });
+        </script>
+        <?php
     }
 
     /**
@@ -229,7 +313,7 @@ class Litter extends PostType
 {
 
     const POST_TYPE = 'litter';
-    const META = [];
+    const META = ['father', 'mother', 'birthday'];
 
     static function post_type()
     {
@@ -262,11 +346,34 @@ class Litter extends PostType
             'rewrite' => array('slug' => 'litters'),
             'has_archive' => true,
             'menu_position' => 30,
-            'menu_icon' => 'dashicons-calendar-alt',
+            'menu_icon' => 'dashicons-awards',
             'register_meta_box_cb' => [self::class, 'add_metaboxes'],
         );
 
         register_post_type(self::type(), $args);
 
+    }
+
+    static function add_metaboxes()
+    {
+        add_meta_box(
+            'litter_parents',
+            'Litter parents',
+            [Cat::class, 'cat_parents'],
+            self::type(),
+            'side',
+            'default'
+        );
+
+        add_meta_box(
+            'litter_birthday',
+            'Litter birthday',
+            [Cat::class, 'cat_birthday'],
+            self::type(),
+            'side',
+            'default'
+        );
+
+        wp_reset_postdata();
     }
 }
